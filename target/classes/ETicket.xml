@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ETicket>
+   <couponCode>COUP1</couponCode>
+   <customerName>C1</customerName>
+   <location>L1</location>
+   <movieName>M1</movieName>
+   <price>120</price>
+   <seats>3A;3B;3C</seats>
+   <timeslot>10:00</timeslot>
+</ETicket>

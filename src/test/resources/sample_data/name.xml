@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<body>
+<BookTicket>
+         <customerName>User2</customerName>
+         <movieName>MOVIE1</movieName>
+         <location>CINEPOLIS MALL</location>
+         <city>MUMBAI</city>
+         <seats>6</seats>
+         <timeslot>10:00</timeslot>
+         <!--Optional:-->
+         <couponCode>COUP1</couponCode>
+         <price>180</price>
+      </BookTicket>
+</body>

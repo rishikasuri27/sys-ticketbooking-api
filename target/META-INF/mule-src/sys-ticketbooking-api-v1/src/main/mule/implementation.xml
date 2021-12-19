@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="6b38fdeb-a099-4e07-bd3e-efddd356a582" >
+		<db:my-sql-connection host="sql6.freesqldatabase.com" port="3306" user="sql6459792" password="wHK6dNvZe2" database="sql6459792" />
+	</db:config>
+	<flow name="bookTicket" doc:id="3407653d-7e9d-4147-a931-d88e0b55cc9b" >
+		<ee:transform doc:name="Transform Message" doc:id="5b0b9e65-e271-4588-9e15-acbeb6a9efd8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	data: payload.body.BookTicket
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload.data]" doc:name="Set Variable" doc:id="847a564c-251b-47e4-86ec-7bc89ea5a0d1" variableName="inc_data"/>
+		<flow-ref doc:name="checkInputs" doc:id="642f884f-08b7-4bb3-b126-7e0778cb584c" name="checkInputs"/>
+		<ee:transform doc:name="Transform Message" doc:id="13c12f45-7d8a-47a6-b46e-bbb52b1f95d0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+ns soap http://schemas.xmlsoap.org/soap/envelope
+---
+{
+	BookTicketResponse: {
+		orderId: vars.orderId,
+		customerName: vars.inc_data.customerName,
+		movieName: vars.inc_data.movieName,
+		location: vars.inc_data.location,
+		city : vars.inc_data.city,
+		seatsBooked: vars.inc_data.seats ++ ";" ++ vars.inc_data.timeslot,
+		"TotalPrice": vars.totalPrice,
+		Discount: vars.discount,
+		"AmountPaid": vars.amountPaid as Number
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="6837fda5-b279-41e3-86a4-8d38d327ce24" message="#[payload]"/>
+	</flow>
+	<flow name="checkInputs" doc:id="6d773c66-9c1a-40bb-8a34-340609fbcf47" >
+		<flow-ref doc:name="getAvailability" doc:id="c06d607c-133f-485a-8bd0-b09928e4b4b1" name="getAvailability"/>
+		<flow-ref doc:name="FetchDiscount" doc:id="8dbb7805-ddd3-4a54-9a23-82f2f48469a4" name="FetchDiscount"/>
+		<flow-ref doc:name="updateAfterBooking" doc:id="887dd4d8-0d04-4a4b-8f15-3d55179086be" name="updateAfterBooking"/>
+	</flow>
+	<flow name="FetchDiscount" doc:id="566fbe20-59af-41b7-a0dc-046d37ec13bd" >
+		<choice doc:name="Check if coupon code provided" doc:id="62a66989-7792-43f3-9160-0e4eb54edf49" >
+			<when expression="#[sizeOf(vars.inc_data.couponCode) &gt; 0]" >
+				<db:select doc:name="Fetch discount" doc:id="3f7d00e4-935d-4ae0-8faf-2caa9cdb41ee" config-ref="Database_Config">
+					<db:sql ><![CDATA[select discount from coupons where code=:coupon]]></db:sql>
+					<db:parameter-types />
+					<db:input-parameters ><![CDATA[#[{
+	coupon: vars.inc_data.couponCode
+}]]]></db:input-parameters>
+				</db:select>
+				<ee:transform doc:name="Transform Message" doc:id="b1949f23-fdb7-4158-b98d-a3acf43c1c14">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload.discount[0] as Number
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="#[payload]" doc:name="Set Variable" doc:id="e10bda04-26e1-4652-8569-1cb9252acdb4" variableName="discount"/>
+				<validation:is-not-null doc:name="check if coupon exists" doc:id="fd06011b-568c-4061-b2e0-27a548ef39b4" value="#[vars.discount]" message="Incorrect coupon!"/>
+			</when>
+			<otherwise >
+				<set-variable value="0" doc:name="discount" doc:id="d3c9d1d8-f6a6-4147-a1ea-6bc4259416e1" variableName="discount" />
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="updateAfterBooking" doc:id="b571272c-40ec-4d46-8c04-6bb5ede4c7b9" >
+		<set-variable value="#[vars.inc_data.seats as Number]" doc:name="bookedseats" doc:id="897a6dc1-3d6b-4ee4-aec6-5e2fbe91608a" variableName="bookedseats"/>
+		<set-variable value='#[vars.availableSeats[0] - vars.bookedSeats]' doc:name="updatedseats" doc:id="746510c3-a390-4525-b4e4-e5dea821fc3a" variableName="reduced" />
+		<db:update doc:name="Update booking availability" doc:id="32af6e4f-fb80-4ebb-8634-14d649160bec" config-ref="Database_Config" target="updateStatus">
+			<db:sql><![CDATA[update availability_details set seatsAvlbl = :val where city = :city and movie_name = :movie
+and slot= :time_slot and loc = :loc]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+	val : vars.reduced as String,
+	loc : vars.inc_data.location,
+	time_slot : vars.inc_data.timeslot,
+	city: vars.inc_data.city,
+	movie:  vars.inc_data.movieName
+}]]]></db:input-parameters>
+		</db:update>
+		<set-variable value="#[uuid()]" doc:name="set orderId" doc:id="afb354c1-3816-4fea-9110-9b579c4d784f" variableName="orderId"/>
+		<set-variable value="#[(vars.inc_data.seats as Number * vars.inc_data.price as Number)]" doc:name="totalPrice" doc:id="3a9e8974-c599-4425-9a3d-8b9cd33ae6ca" variableName="totalPrice"/>
+		<set-variable value="#[output application/json&#10;---&#10;(vars.totalPrice as Number - vars.discount as Number)]" doc:name="amountPaid" doc:id="08c15c09-d09b-49c9-8a6b-adfb87e0a6f4" variableName="amountPaid" mimeType="application/json"/>
+		<set-payload value="#[finalamount: vars.amountPaid as Number]" doc:name="Set Payload" doc:id="5ed5e670-871f-44fe-ab24-c349e99376a3" />
+		<db:insert doc:name="Insert into order details" doc:id="54556cf6-5961-4f15-aea1-6e47d2cd1d43" config-ref="Database_Config" target="status">
+			<db:sql ><![CDATA[insert into order_details (orderId, customerName, movieName, locName,city, seatsBooked, totalPrice,discountPrice, amountPaid,slot)
+values (:orderId,:cust,:movie,:loc,:city,:seats, :price,:discount,:paid,:slot)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	orderId: vars.orderId as String,
+	cust: vars.inc_data.customerName as String,
+	movie: vars.inc_data.movieName as String,
+	loc: vars.inc_data.location as String,
+	city: vars.inc_data.city as String,
+	seats: vars.inc_data.seats as String,
+	price: vars.totalPrice as Number,
+	discount: vars.discount as Number,
+	paid: payload.finalamount,
+	slot: vars.inc_data.timeslot
+}]]]></db:input-parameters>
+		</db:insert>
+	</flow>
+	<flow name="getAvailability" doc:id="2d57ca6e-094d-432a-9f81-9124b169f82d" >
+		<db:select doc:name="Select" doc:id="36f2b9ed-a89b-454b-93c6-594081be686e" config-ref="Database_Config">
+			<db:sql ><![CDATA[select seatsAvlbl from availability_details where seatsAvlbl > :seats and loc=:loc and city=:city and
+slot=:time_slot and movie_name=:movie]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	seats: vars.inc_data.seats, 
+	loc : vars.inc_data.location,
+	time_slot : vars.inc_data.timeslot,
+	city: vars.inc_data.city,
+	movie:  vars.inc_data.movieName
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="10528b5b-7a03-4bc2-b167-0f03c6a3d07e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.seatsAvlbl]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="c9f0dfd5-155e-438a-94af-1395501fff07" variableName="availableSeats"/>
+		<validation:is-not-null doc:name="Is not null" doc:id="44a6700d-f485-4daa-9fb3-26ea8abeed66" value="#[vars.availableSeats]" message="Seats not available"/>
+	</flow>
+	<flow name="getTicket" doc:id="fe765932-043b-4182-af68-4865c64ae8e6" >
+		<db:select doc:name="Select" doc:id="e273315e-54db-4cf5-9f20-0c263fe156c2" config-ref="Database_Config">
+			<db:sql ><![CDATA[select orderId, customerName, movieName, locName, city, seatsBooked, totalPrice, discountPrice, amountPaid,slot
+ from order_details
+ where orderId =:orderId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	orderId: payload.body.getTicket.orderId
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="e58a3193-4a9d-437d-91cd-22dd3958a734" >
+			<when expression="#[sizeOf(payload) &gt; 0]">
+				<ee:transform doc:name="To JSON" doc:id="5fe73b5b-db40-4381-a164-10644b418136">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	orderId: payload.orderId,
+	customerName: payload.customerName,
+	movieName: payload.movieName,
+	location: payload.locName,
+	city: payload.city,
+	seatsBooked: payload.seatsBooked,
+	slot: payload.slot,
+	totalPrice: payload.totalPrice,
+	discountPrice: payload.discountPrice,
+	amountPaid: payload.amountPaid
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="d836963c-46d2-437b-9b6f-a2dbd21edc34" message="#[payload]" />
+				<ee:transform doc:name="JSON to XML" doc:id="b895038e-386e-4f04-9040-e823b741197e">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xml
+ns soap http://schemas.xmlsoap.org/soap/envelope
+---
+{
+	getTicketResponse: {
+		orderId: payload.orderId,
+		customerName: payload.customerName,
+		movieName: payload.movieName,
+		location: payload.location,
+		city : payload.city,
+		seatsBooked: payload.seatsBooked[0] as String ++ ";" ++ payload.slot[0] as String,
+		"TotalPrice": payload.totalPrice,
+		Discount: payload.discountPrice,
+		"AmountPaid": payload.amountPaid
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="48b8a975-904d-4c9c-a6f9-8c59f2ed309c" />
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="19ae0860-5a27-427f-a627-d5786cf8aed0" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+ns soap http://schemas.xmlsoap.org/soap/envelope
+---
+{
+	getTicketResponse: {
+		orderId: "Incorrect orderId"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+</mule>

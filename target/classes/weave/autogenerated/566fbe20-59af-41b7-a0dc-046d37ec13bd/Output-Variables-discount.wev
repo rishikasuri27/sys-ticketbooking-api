@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_566fbe20_59af_41b7_a0dc_046d37ec13bd_Output_Variables_discount = Null | String
+
